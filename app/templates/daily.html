@@ -1,0 +1,79 @@
+{% extends 'base.html' %}{% block board %}
+<div class="grid">
+<section class="panel wide">
+  <div class="panel__head"><h2>唯一日报 · 按实际预算版本封存</h2><span>{{report.counts.batches}} 批次 / {{report.counts.documents}} 文档</span></div>
+  <div class="panel__body">
+    <p class="note">{{report.basis}}。{{report.ruling.attribution}}</p>
+    <table class="version-ledger">
+      <thead><tr><th>预算版本</th><th>批次</th><th>文档</th><th>通过</th><th>差异数</th><th>差异合计</th><th>口径变化文档</th></tr></thead>
+      <tbody>
+      {% for version,total in report.totals_by_budget.items() %}
+        <tr><td>{{version}}</td><td>{{total.batches}}</td><td>{{total.documents}}</td><td>{{total.pass}}</td><td>{{total.differences}}</td><td>{{total.difference_sum}}</td><td>—</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    <p class="note">合计按预算分栏，不跨口径相加；跨预算对照只列差异，不并入合计。</p>
+  </div>
+</section>
+<section class="panel wide">
+  <div class="panel__head"><h2>裁决</h2><span>{{report.ruling.code}}</span></div>
+  <div class="panel__body">
+    <div class="metric"><span>触发</span><b>{{report.ruling.trigger}}</b></div>
+    <div class="metric"><span>作废批次</span><b>{{report.ruling.revoked_batches|length}}</b></div>
+    <div class="metric"><span>追溯重算批次</span><b>{{report.ruling.recomputed_batches|length}}</b></div>
+    {% for line in report.ruling.policy %}<div class="qrow">{{line}}</div>{% endfor %}
+  </div>
+</section>
+<section class="panel wide">
+  <div class="panel__head"><h2>批次与预算对照</h2><span>每批一份封存结论</span></div>
+  <div class="table-scroll">
+    <table class="version-ledger">
+      <thead><tr><th>批次</th><th>输入摘要</th><th>实际预算</th><th>复核</th><th>通过</th><th>差异数</th><th>口径变化文档</th></tr></thead>
+      <tbody>
+      {% for batch in report.batches %}
+        <tr class="{{'mismatch' if batch.changed_documents else ''}}">
+          <td><a href="/api/runs/{{batch.run_id}}">{{batch.run_id}}</a></td>
+          <td title="{{batch.input_sha256}}">{{batch.input_sha256[:12]}}</td>
+          <td>{{batch.budget.label}} / {{batch.budget.seconds}}s</td>
+          <td>{{batch.decision}}</td>
+          <td>{{batch.sealed.metrics.pass}}</td>
+          <td>{{batch.sealed.metrics.differences}}</td>
+          <td>{{batch.changed_documents}}</td>
+        </tr>
+      {% else %}<tr><td class="empty" colspan="7">暂无批次。</td></tr>{% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+<section class="panel wide">
+  <div class="panel__head"><h2>预算敏感批次</h2><span>{{report.budget_sensitive_batches|length}} 批</span></div>
+  <div class="panel__body">
+    <p class="note">这些批次的文档在另一预算下结论会变。封存结论保持不变，仅提示人工判断是否需要补充复核。</p>
+    {% for item in report.budget_sensitive_batches %}
+    <div class="qrow"><a href="/api/runs/{{item.run_id}}">{{item.run_id}}</a> / {{item.sealed_budget_version}} / {{item.decision}} / 变化 {{item.changed_documents}} 篇：{{item.documents|join(', ')}} / {{item.action}}</div>
+    {% else %}<div class="empty">没有跨预算会改变结论的批次。</div>{% endfor %}
+  </div>
+</section>
+{% for batch in report.batches %}{% if batch.comparison %}
+<section class="panel wide">
+  <div class="panel__head"><h2>逐文档对照 · {{batch.run_id}}</h2><span>封存 {{batch.budget.label}} / {{batch.budget.seconds}}s</span></div>
+  <div class="table-scroll">
+    <table class="version-ledger">
+      <thead><tr><th>文档</th><th>对照预算</th><th>封存结论</th><th>对照结论</th><th>封存差异</th><th>对照差异</th><th>变化</th></tr></thead>
+      <tbody>
+      {% for item in batch.comparison %}
+        <tr class="{{'mismatch' if item.changed else ''}}">
+          <td>{{item.doc_id}}</td><td>{{item.label}}</td>
+          <td>{{(item.old.gate ~ ' / ' ~ item.old.status) if item.old else '—'}}</td>
+          <td>{{(item.new.gate ~ ' / ' ~ item.new.status) if item.new else '—'}}</td>
+          <td>{{item.old.difference if item.old else '—'}}</td><td>{{item.new.difference if item.new else '—'}}</td>
+          <td>{{'预算口径' if item.changed else '无'}}</td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endif %}{% endfor %}
+</div>
+{% endblock %}

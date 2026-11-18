@@ -1,1 +1,24 @@
-const consoleState={paused:false};const issue=document.querySelector('#run-error');const tail=document.querySelector('#log-tail');function appendLog(text){if(!tail)return;const line=document.createElement('div');line.className='log-line';line.textContent=new Date().toISOString().slice(11,19)+' INFO '+text;tail.append(line);if(!consoleState.paused)tail.scrollTop=tail.scrollHeight;}async function runAction(url,payload,upload=false){issue.textContent='回放中…';appendLog('REQUEST');try{const options={method:'POST',body:upload?payload:JSON.stringify(payload)};if(!upload)options.headers={'Content-Type':'application/json'};const response=await fetch(url,options);const result=await response.json();if(!response.ok)throw Error(result.message);appendLog('COMPLETE '+result.run_id);location.reload();}catch(error){issue.textContent=error.message;appendLog('FAIL '+error.message);}}document.querySelector('#pause-log')?.addEventListener('click',event=>{consoleState.paused=!consoleState.paused;event.currentTarget.textContent=consoleState.paused?'继续':'暂停';});document.querySelector('#replay').addEventListener('click',()=>runAction('/api/runs',{sample:document.querySelector('#stream-preset').value}));document.querySelector('#signoff').addEventListener('click',()=>runAction('/api/runs/'+window.indexBatch.id+'/review',{version:window.indexBatch.version,decision:'已复核'}));document.querySelector('#load-stream').addEventListener('click',()=>{const file=document.querySelector('#event-file').files[0];if(!file){issue.textContent='请选择双写事件文件。';return;}const form=new FormData();form.append('file',file);runAction('/api/upload',form,true);});document.querySelector('#doc-filter')?.addEventListener('input',event=>{for(const row of document.querySelectorAll('#doc-rows tr'))row.hidden=!row.textContent.includes(event.target.value);});
+const consoleState={paused:false};const issue=document.querySelector('#run-error');const tail=document.querySelector('#log-tail');
+function appendLog(text){if(!tail)return;const line=document.createElement('div');line.className='log-line';line.textContent=new Date().toISOString().slice(11,19)+' INFO '+text;tail.append(line);if(!consoleState.paused)tail.scrollTop=tail.scrollHeight;}
+async function runAction(url,payload,upload=false){
+  if(issue)issue.textContent='回放中…';appendLog('REQUEST');
+  try{
+    const options={method:'POST',body:upload?payload:JSON.stringify(payload)};
+    if(!upload)options.headers={'Content-Type':'application/json'};
+    const response=await fetch(url,options);const result=await response.json();
+    if(!response.ok)throw Error(result.message);
+    if(result.reused){
+      // 批次已存在：保留封存预算与结论，不刷新、不另起口径。
+      const sealed=result.executed_budget||{},requested=result.requested_budget||{};
+      const note='REUSED '+result.run_id+' 封存预算 '+sealed.label+'/'+sealed.seconds+'s，未改写结论';
+      appendLog(note);if(issue)issue.textContent=note+(requested.version&&requested.version!==sealed.version?'（本次请求 '+requested.label+' 仅作对照）':'');
+      return;
+    }
+    appendLog('COMPLETE '+result.run_id+(result.executed_budget?' · '+result.executed_budget.label:''));location.reload();
+  }catch(error){if(issue)issue.textContent=error.message;appendLog('FAIL '+error.message);}
+}
+document.querySelector('#pause-log')?.addEventListener('click',event=>{consoleState.paused=!consoleState.paused;event.currentTarget.textContent=consoleState.paused?'继续':'暂停';});
+document.querySelector('#replay')?.addEventListener('click',()=>runAction('/api/runs',{sample:document.querySelector('#stream-preset').value}));
+document.querySelector('#signoff')?.addEventListener('click',()=>runAction('/api/runs/'+window.indexBatch.id+'/review',{version:window.indexBatch.version,decision:'已复核'}));
+document.querySelector('#load-stream')?.addEventListener('click',()=>{const file=document.querySelector('#event-file').files[0];if(!file){issue.textContent='请选择双写事件文件。';return;}const form=new FormData();form.append('file',file);runAction('/api/upload',form,true);});
+document.querySelector('#doc-filter')?.addEventListener('input',event=>{for(const row of document.querySelectorAll('#doc-rows tr'))row.hidden=!row.textContent.includes(event.target.value);});

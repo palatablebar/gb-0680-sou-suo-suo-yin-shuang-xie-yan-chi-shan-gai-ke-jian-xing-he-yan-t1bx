@@ -31,10 +31,22 @@
 | TRAP-09 | 超大版本 | JSON精度损失 | 文本序列化 | `app/values.py` | `tests/test_m2.py::test_large_version_precise` |
 | TRAP-13 | 删除后迟到旧写 | 文档复活 | 最大版本墓碑 | `app/modules/m3_versions/rules.py` | `tests/test_m3.py::test_tombstone_beats_late_old_write` |
 | TRAP-23 | 延迟阈值边界 | 多判延迟 | 等于阈值通过 | `app/modules/m5_latency/rules.py` | `tests/test_m5.py::test_threshold_equal_pass` |
+| TRAP-27 | 预算规则切换 | 新旧批次混用同一日报口径 | 预算登记版本化，批次冻结实际版本，日报按预算分栏，跨预算只做只读对照 | `app/budgets.py`、`app/store.py` | `tests/test_budget.py::test_daily_totals_split_by_budget_never_mixed` |
+| TRAP-28 | 重跑改写封存 | 同输入换预算产生新批次或覆盖结论 | 预算字段不参与批次身份，`INSERT OR IGNORE` 复用批次 | `app/manifest.py`、`app/store.py` | `tests/test_budget.py::test_rerun_does_not_change_sealed_conclusion_after_review` |
+
+## 预算规则更新裁决
+
+2026-11-18 午间将延迟预算由 120 秒收紧到 90 秒。裁决为 `KEEP_SEALED`：
+
+- 作废批次集合为空，追溯重算批次集合为空。
+- 上午已复核批次保留 120 秒口径与全部封存结论；待复核旧批次同样不就地改写。
+- 午间及以后新批次默认 90 秒，并在清单与导出中记录实际预算版本。
+- 历史批次在 `/daily` 与 `/api/runs/<id>` 上展示只读影子评估：同一输入摘要下的通过结论与差异数变化一律归因预算版本，不归因文档。
+- 重跑同一输入复用原批次：不新增批次，不改变已封存结论与复核状态，日报 `report_sha256` 稳定。
 
 ## 对账规则
 
-输入原始逻辑行=最终采纳来源行+隔离来源行+重复行+空白行+分段表头。派生记录用_sources保存完整来源，因此分组不丢行。业务预期合计与上游申报合计之差等于逐行差异之和。结果按输入摘要、规则版本及参数产生唯一批次，事务写入；同源重跑只复用已有批次。
+输入原始逻辑行=最终采纳来源行+隔离来源行+重复行+空白行+分段表头。派生记录用_sources保存完整来源，因此分组不丢行。业务预期合计与上游申报合计之差等于逐行差异之和。结果按输入摘要、规则版本及非预算参数产生唯一批次，事务写入；同源重跑只复用已有批次。预算版本不参与批次身份，日报合计按实际预算版本分栏，不跨口径相加。
 
 ## 已知不覆盖
 

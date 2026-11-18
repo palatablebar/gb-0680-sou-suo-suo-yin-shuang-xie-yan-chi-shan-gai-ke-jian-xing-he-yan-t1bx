@@ -1,8 +1,14 @@
 from decimal import Decimal
+from app.budgets import current_budget,get_budget
 from app.values import number,instant
 from app.errors import DomainError
 def evaluate(rows,context):
-    p=context.get("parameters",{});threshold=number(p.get("max_delay_seconds","120"));as_of=instant(p.get("as_of","2026-11-16T10:10:00Z"))
+    p=context.get("parameters",{})
+    # 未显式给阈值时跟随已冻结的预算版本，避免模块预览与日报混用口径。
+    if p.get("max_delay_seconds") is not None: threshold=number(p["max_delay_seconds"])
+    elif p.get("budget_version"): threshold=number(get_budget(p["budget_version"])["seconds"])
+    else: threshold=number(current_budget()["seconds"])
+    as_of=instant(p.get("as_of","2026-11-16T10:10:00Z"))
     if threshold<0:raise DomainError("BAD_THRESHOLD","延迟阈值不能为负")
     out=[]
     for row in rows:

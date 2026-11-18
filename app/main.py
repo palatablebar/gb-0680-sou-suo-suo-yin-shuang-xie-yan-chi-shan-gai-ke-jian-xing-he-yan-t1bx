@@ -2,6 +2,7 @@ from flask import Flask,jsonify,request,send_from_directory
 from app.config import ROOT,DATA_DIR,MODULES
 from app.errors import DomainError
 from app import pipeline,store
+from app.rulings import transition
 from app.web import register_pages
 import importlib
 def create_app():
@@ -34,7 +35,11 @@ def create_app():
     @application.get("/api/runs")
     def history(): return {"runs":store.history()}
     @application.get("/api/runs/<run_id>")
-    def run_detail(run_id): return store.get(run_id)
+    def run_detail(run_id): return store.view(run_id)
+    @application.get("/api/daily")
+    def daily(): return store.daily()
+    @application.get("/api/budget-rules")
+    def budget_rules(): return transition()
     @application.post("/api/runs/<run_id>/review")
     def review(run_id):
         p=request.get_json(silent=True) or {}
@@ -43,7 +48,7 @@ def create_app():
     @application.get("/api/runs/<run_id>/archive")
     def archive(run_id):
         from app.archive import build_archive
-        run=store.get(run_id)
+        run=store.view(run_id)
         return application.response_class(build_archive(run),mimetype="text/csv",headers={"Content-Disposition":'attachment; filename="evidence.csv"'})
     for index,(slug,title) in enumerate(MODULES,1):
         module=importlib.import_module(f"app.modules.m{index}_{slug}.handler")
